@@ -1,0 +1,33 @@
+/* HireMind AI - Admin Specific Styles */
+
+.admin-analytics-grid {
+  display: grid;
+  grid-template-cols: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .admin-analytics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.audit-log-container {
+  extend: .table-premium-container;
+}
+
+.audit-row-success {
+  border-left: 3px solid var(--emerald-600);
+}
+
+.audit-row-failure {
+  border-left: 3px solid var(--rose-600);
+}
+
+.audit-meta-text {
+  font-family: monospace;
+  font-size: 0.75rem;
+  background-color: var(--slate-50);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}

@@ -1,0 +1,36 @@
+@import "./styles/App.css";
+@import "./styles/components.css";
+@import "./styles/landing.css";
+@import "./styles/auth.css";
+@import "./styles/dashboard.css";
+@import "./styles/candidate.css";
+@import "./styles/recruiter.css";
+@import "./styles/interviewer.css";
+@import "./styles/admin.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer base {
+  body {
+    @apply font-sans bg-[#FAF9F6] text-slate-900;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

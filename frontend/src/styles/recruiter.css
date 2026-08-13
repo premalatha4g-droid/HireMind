@@ -1,0 +1,143 @@
+/* HireMind AI - Recruiter Specific Styles */
+
+/* Match Intelligence Screen layout */
+.workspace-grid {
+  display: grid;
+  grid-template-cols: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .workspace-grid {
+    grid-template-columns: 20rem 1fr;
+  }
+}
+
+.applicant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.applicant-card-item {
+  background-color: #FFFFFF;
+  border: 1px solid var(--slate-200);
+  border-radius: 10px;
+  padding: 1rem;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.applicant-card-item:hover {
+  border-color: #CBD5E1;
+  background-color: var(--slate-50);
+}
+
+.applicant-card-item-selected {
+  border-color: var(--indigo-600);
+  background-color: var(--indigo-50);
+}
+
+/* Compare Matrix grid */
+.compare-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.compare-matrix-th {
+  background-color: var(--slate-50);
+  border-bottom: 2px solid var(--slate-200);
+  padding: 1rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.compare-matrix-td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--slate-200);
+  font-size: 0.8125rem;
+}
+
+/* Kanban Board Classes */
+.kanban-board-container {
+  display: flex;
+  gap: 1.25rem;
+  overflow-x: auto;
+  padding-bottom: 1.5rem;
+  min-height: calc(100vh - 200px);
+  align-items: flex-start;
+}
+
+.kanban-column {
+  flex-shrink: 0;
+  width: 19rem;
+  background-color: #F1F5F9;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: calc(100vh - 220px);
+}
+
+.kanban-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.5rem;
+  border-b: 1px solid var(--slate-200);
+}
+
+.kanban-column-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--slate-500);
+}
+
+.kanban-column-badge {
+  background-color: var(--slate-200);
+  color: var(--slate-500);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
+}
+
+.kanban-cards-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  flex: 1;
+  padding: 0.125rem;
+  min-height: 250px;
+}
+
+.kanban-card {
+  background-color: #FFFFFF;
+  border: 1px solid var(--slate-200);
+  border-radius: 10px;
+  padding: 1rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  cursor: grab;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.kanban-card:active {
+  cursor: grabbing;
+}
+
+.kanban-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.kanban-card-dragging {
+  opacity: 0.4;
+  border-style: dashed;
+}
+

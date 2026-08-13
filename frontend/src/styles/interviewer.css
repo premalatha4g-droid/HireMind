@@ -1,0 +1,54 @@
+/* HireMind AI - Interviewer Specific Styles */
+
+.interview-grid {
+  display: grid;
+  grid-template-cols: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .interview-grid {
+    grid-template-columns: 22rem 1fr;
+  }
+}
+
+.question-panel {
+  background-color: var(--violet-50);
+  border: 1px solid var(--violet-100);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.question-card {
+  background-color: #FFFFFF;
+  border: 1px solid var(--violet-100);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.evaluation-score-grid {
+  display: grid;
+  grid-template-cols: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .evaluation-score-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.score-box {
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
+  padding: 0.75rem;
+  text-align: center;
+  background-color: var(--slate-50);
+}
+
+.score-num {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--indigo-600);
+}
