@@ -101,9 +101,9 @@ const RecruiterDashboard = () => {
   const funnelData = [
     { name: 'Applied', count: dbStats.pipeline.APPLIED || 0, fill: '#6366f1' },
     { name: 'Screening', count: dbStats.pipeline.SCREENING || 0, fill: '#4f46e5' },
-    { name: 'Shortlisted', count: dbStats.pipeline.SHORTLISTED || 0, fill: '#4338ca' },
-    { name: 'Interview', count: dbStats.pipeline.INTERVIEW || 0, fill: '#3730a3' },
-    { name: 'Assessment', count: dbStats.pipeline.ASSESSMENT || 0, fill: '#312e81' },
+    { name: 'Assessment', count: dbStats.pipeline.ASSESSMENT || 0, fill: '#4338ca' },
+    { name: 'Shortlisted', count: dbStats.pipeline.SHORTLISTED || 0, fill: '#3730a3' },
+    { name: 'Interview', count: dbStats.pipeline.INTERVIEW || 0, fill: '#312e81' },
     { name: 'Offer', count: dbStats.pipeline.OFFER || 0, fill: '#10b981' },
     { name: 'Hired', count: dbStats.pipeline.HIRED || 0, fill: '#059669' }
   ];

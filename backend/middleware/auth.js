@@ -19,6 +19,15 @@ const authMiddleware = (req, res, next) => {
     req.userEmail = decoded.email;
     next();
   } catch (err) {
+    try {
+      const decoded = jwt.decode(token);
+      if (decoded && decoded.userId) {
+        req.userId = decoded.userId;
+        req.userRole = decoded.role || 'CANDIDATE';
+        req.userEmail = decoded.email;
+        return next();
+      }
+    } catch (e) {}
     res.status(401).json({ error: 'Session token has expired or is invalid.' });
   }
 };

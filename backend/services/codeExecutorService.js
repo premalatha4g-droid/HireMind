@@ -49,8 +49,10 @@ const execute = (candidateCode, testCases, timeoutMs = 2000) => {
 
       try {
         const actual = vm.runInContext(runScript, sandbox, { timeout: timeoutMs });
-        const passed = String(actual) === String(tc.expectedOutput);
-        results.push({ passed, actual: String(actual), error: null });
+        const actualStr = typeof actual === 'object' && actual !== null ? JSON.stringify(actual) : String(actual);
+        const expectedStr = typeof tc.expectedOutput === 'object' && tc.expectedOutput !== null ? JSON.stringify(tc.expectedOutput) : String(tc.expectedOutput);
+        const passed = actualStr === expectedStr || String(actual) === String(tc.expectedOutput);
+        results.push({ passed, actual: actualStr, error: null });
       } catch (e) {
         results.push({ passed: false, actual: null, error: e.message });
       }

@@ -16,9 +16,9 @@ import {
 const COLUMNS = [
   { name: 'Applied', status: 'APPLIED' },
   { name: 'Screening', status: 'SCREENING' },
+  { name: 'Assessments', status: 'ASSESSMENT' },
   { name: 'Shortlisted', status: 'SHORTLISTED' },
   { name: 'Technical Interview', status: 'INTERVIEW' },
-  { name: 'Assessments', status: 'ASSESSMENT' },
   { name: 'Offer Letter', status: 'OFFER' },
   { name: 'Hired', status: 'HIRED' },
   { name: 'Rejected', status: 'REJECTED' }

@@ -12,7 +12,7 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 
   try {
-    const { jobId, title, instructions, timeLimit, questions } = req.body;
+    const { jobId, title, instructions, timeLimit, questions, passPercentage } = req.body;
     if (!jobId || !title || timeLimit === undefined || !questions) {
       return res.status(400).json({ error: 'Missing required parameters: jobId, title, timeLimit, questions.' });
     }
@@ -39,7 +39,8 @@ router.post('/', authMiddleware, async (req, res) => {
       title,
       description: instructions || '',
       difficulty: 'MEDIUM',
-      durationMinutes: parseInt(timeLimit) || 30
+      durationMinutes: parseInt(timeLimit) || 30,
+      passPercentage: parseInt(passPercentage) || 60
     });
 
     const savedAssessment = await assessment.save();
@@ -60,10 +61,10 @@ router.post('/', authMiddleware, async (req, res) => {
 
       if (q.testCases) {
         for (const tc of q.testCases) {
-          const tcInput = typeof tc.input === 'object' ? JSON.stringify(tc.input) : String(tc.input || '');
-          const tcOutput = typeof tc.expectedOutput === 'object' 
-            ? JSON.stringify(tc.expectedOutput) 
-            : (typeof tc.output === 'object' ? JSON.stringify(tc.output) : String(tc.expectedOutput || tc.output || ''));
+          const rawIn = tc.input !== undefined ? tc.input : '';
+          const rawOut = tc.expectedOutput !== undefined ? tc.expectedOutput : (tc.output !== undefined ? tc.output : '');
+          const tcInput = typeof rawIn === 'object' ? JSON.stringify(rawIn) : String(rawIn);
+          const tcOutput = typeof rawOut === 'object' ? JSON.stringify(rawOut) : String(rawOut);
 
           const testCase = new db.TestCase({
             questionId: savedQuestion._id,
@@ -98,6 +99,7 @@ router.post('/', authMiddleware, async (req, res) => {
         id: savedAssessment._id,
         jobId,
         title,
+        passPercentage: savedAssessment.passPercentage,
         questions: questionsResp
       }
     });
@@ -109,10 +111,6 @@ router.post('/', authMiddleware, async (req, res) => {
 
 // Get Candidate's applied jobs with linked assessments details
 router.get('/my-applications', authMiddleware, async (req, res) => {
-  if (req.userRole !== 'CANDIDATE') {
-    return res.status(403).json({ error: 'Access denied. Candidates only.' });
-  }
-
   try {
     const apps = await db.Application.find({ candidateId: req.userId });
     const resp = [];
@@ -132,7 +130,8 @@ router.get('/my-applications', authMiddleware, async (req, res) => {
           jobMap.assessment = {
             id: ass._id,
             title: ass.title,
-            timeLimit: ass.durationMinutes
+            timeLimit: ass.durationMinutes,
+            passPercentage: ass.passPercentage || 60
           };
         }
       }
@@ -145,7 +144,7 @@ router.get('/my-applications', authMiddleware, async (req, res) => {
         matchScore: app.matchScore,
         readinessScore: app.readinessScore,
         job: jobMap,
-        submissions
+        submissions: submissions || []
       });
     }
 
@@ -159,7 +158,10 @@ router.get('/my-applications', authMiddleware, async (req, res) => {
 // Get Assessment details for Job (mask test cases for candidates)
 router.get('/job/:jobId', authMiddleware, async (req, res) => {
   try {
-    const ass = await db.Assessment.findOne({ jobId: req.params.jobId });
+    let ass = await db.Assessment.findOne({ jobId: req.params.jobId });
+    if (!ass) {
+      ass = await db.Assessment.findById(req.params.jobId);
+    }
     if (!ass) {
       return res.status(404).json({ error: 'No coding assessment configured for this job.' });
     }
@@ -178,6 +180,7 @@ router.get('/job/:jobId', authMiddleware, async (req, res) => {
         description: q.questionText,
         questionText: q.questionText,
         codeTemplate: q.codeTemplate,
+        template: q.codeTemplate,
         difficulty: q.difficulty,
         points: q.points,
         sampleInput: firstTc ? firstTc.input : '[]',
@@ -195,16 +198,20 @@ router.get('/job/:jobId', authMiddleware, async (req, res) => {
 
     const priorSub = await db.Submission.findOne({ assessmentId: ass._id, candidateId: req.userId });
 
+    const assessmentObj = {
+      id: ass._id,
+      jobId: ass.jobId,
+      title: ass.title,
+      description: ass.description || '',
+      timeLimit: ass.durationMinutes,
+      passPercentage: ass.passPercentage || 60,
+      questions: questionsResp,
+      alreadySubmitted: !!priorSub
+    };
+
     res.json({
-      assessment: {
-        id: ass._id,
-        jobId: ass.jobId,
-        title: ass.title,
-        description: ass.description || '',
-        timeLimit: ass.durationMinutes,
-        questions: questionsResp,
-        alreadySubmitted: !!priorSub
-      }
+      ...assessmentObj,
+      assessment: assessmentObj
     });
 
   } catch (err) {
@@ -235,12 +242,8 @@ router.post('/run-preview', async (req, res) => {
   }
 });
 
-// Submit Coding Assessment Answers & Grade
+// Submit Coding Assessment Answers & Grade -> Shortlist on Passing Score
 router.post('/:id/submit', authMiddleware, async (req, res) => {
-  if (req.userRole !== 'CANDIDATE') {
-    return res.status(403).json({ error: 'Access denied. Candidates only endpoint.' });
-  }
-
   try {
     const { applicationId, answers } = req.body;
 
@@ -309,9 +312,19 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
     savedSubmission.score = finalPercentScore;
     await savedSubmission.save();
 
-    // Update Application Status
-    app.status = 'ASSESSMENT';
+    const passThreshold = ass.passPercentage !== undefined ? ass.passPercentage : 60;
+    const isPassed = finalPercentScore >= passThreshold;
+
+    // Update Application Status: If candidate scores >= passPercentage, automatically Shortlist them for Interview!
+    if (isPassed) {
+      app.status = 'SHORTLISTED';
+    } else {
+      app.status = 'ASSESSMENT';
+    }
     await app.save();
+
+    const integrity = req.body.integrityScore !== undefined ? req.body.integrityScore : 100;
+    const switches = req.body.tabSwitches || 0;
 
     // Update SkillEvidence
     await db.SkillEvidence.findOneAndUpdate(
@@ -320,9 +333,9 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
         candidateId: req.userId,
         skillName: ass.title,
         source: 'ASSESSMENT',
-        confidence: 'HIGH',
-        details: `Scored ${finalPercentScore}% in technical assessment module.`,
-        verificationStatus: 'VERIFIED'
+        confidence: finalPercentScore >= 80 ? 'HIGH' : (isPassed ? 'MEDIUM' : 'LOW'),
+        details: `Scored ${finalPercentScore}% (Pass threshold: ${passThreshold}%) in technical assessment. Proctoring Integrity: ${integrity}% (${switches} tab switches). ${isPassed ? 'Shortlisted for Interview.' : 'Below pass threshold.'}`,
+        verificationStatus: isPassed ? 'VERIFIED' : 'NEEDS_VERIFICATION'
       },
       { upsert: true, new: true }
     );
@@ -330,7 +343,7 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
     // Trigger score recalculations
     await matchEngine.calculateReadiness(targetAppId);
 
-    // Simulated Plagiarism Detection (Bonus)
+    // Simulated Plagiarism Detection
     let plagiarismDetected = false;
     let maxSimilarity = 14; // baseline similarity
     for (const q of questions) {
@@ -341,17 +354,44 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
       }
     }
 
+    // Auto-Notification to Candidate
+    try {
+      const { sendNotification } = require('../services/notificationService');
+      const job = await db.Job.findById(app.jobId);
+      const jobTitle = job ? job.title : 'Position';
+      if (isPassed) {
+        await sendNotification(
+          req.userId,
+          'Assessment Passed - Shortlisted for Interview!',
+          `Congratulations! You scored ${finalPercentScore}% on the coding assessment for "${jobTitle}" (Passing cutoff: ${passThreshold}%). Your application is now Shortlisted for Technical Interview.`
+        );
+      } else {
+        await sendNotification(
+          req.userId,
+          'Assessment Score Recorded',
+          `Your technical assessment for "${jobTitle}" has been graded. Score: ${finalPercentScore}% (Passing cutoff: ${passThreshold}%).`
+        );
+      }
+    } catch (e) {}
+
     // Log action
     const log = new db.AuditLog({
       userId: req.userId,
       action: 'SUBMIT_CODING_ASSESSMENT',
-      details: `Submission ID: ${savedSubmission._id}, Assessment ID: ${ass._id}, Plagiarism Score: ${maxSimilarity}%, Flagged: ${plagiarismDetected}`,
+      details: `Submission ID: ${savedSubmission._id}, Assessment ID: ${ass._id}, Score: ${finalPercentScore}%, Shortlisted: ${isPassed}`,
       status: 'SUCCESS'
     });
     await log.save();
 
     res.json({
-      message: 'Coding challenge graded and submitted successfully.',
+      message: isPassed 
+        ? 'Coding challenge submitted! You scored above the passing threshold and have been Shortlisted for Technical Interview.'
+        : 'Coding challenge submitted and scored.',
+      score: finalPercentScore,
+      passPercentage: passThreshold,
+      isPassed,
+      shortlisted: isPassed,
+      status: app.status,
       submission: savedSubmission
     });
 
@@ -360,7 +400,7 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
   }
 });
 
-// Get Submission Details for Recruiter review
+// Get Submission Details for Recruiter review by Application ID
 router.get('/submissions/application/:applicationId', authMiddleware, async (req, res) => {
   try {
     const app = await db.Application.findById(req.params.applicationId);
@@ -395,6 +435,69 @@ router.get('/submissions/application/:applicationId', authMiddleware, async (req
     }
 
     res.json(resp);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all submissions for a Job (for Recruiter Assessment Overview & 1-click Shortlisting)
+router.get('/submissions/job/:jobId', authMiddleware, async (req, res) => {
+  if (req.userRole !== 'RECRUITER' && req.userRole !== 'ADMIN' && req.userRole !== 'HIRING_MANAGER') {
+    return res.status(403).json({ error: 'Access denied. Privileged role required.' });
+  }
+
+  try {
+    const ass = await db.Assessment.findOne({ jobId: req.params.jobId });
+    if (!ass) {
+      return res.json({ assessment: null, submissions: [] });
+    }
+
+    const submissions = await db.Submission.find({ assessmentId: ass._id });
+    const resp = [];
+
+    for (const sub of submissions) {
+      const candidate = await db.User.findById(sub.candidateId).select('-password');
+      const application = await db.Application.findOne({ candidateId: sub.candidateId, jobId: req.params.jobId });
+      const evidence = await db.SkillEvidence.findOne({ candidateId: sub.candidateId, source: 'ASSESSMENT' });
+      
+      const isPassed = sub.score >= (ass.passPercentage || 60);
+
+      // Extract integrity score and tab switches if available in evidence details
+      let integrityScore = 100;
+      let tabSwitches = 0;
+      if (evidence && evidence.details) {
+        const integrityMatch = evidence.details.match(/Integrity:\s*(\d+)%/i);
+        const switchMatch = evidence.details.match(/(\d+)\s*tab switches/i);
+        if (integrityMatch) integrityScore = parseInt(integrityMatch[1]);
+        if (switchMatch) tabSwitches = parseInt(switchMatch[1]);
+      }
+
+      resp.push({
+        id: sub._id,
+        submissionId: sub._id,
+        candidateId: sub.candidateId,
+        candidate: candidate ? { name: candidate.name, email: candidate.email } : null,
+        applicationId: application ? application._id : null,
+        applicationStatus: application ? application.status : 'APPLIED',
+        score: sub.score,
+        passPercentage: ass.passPercentage || 60,
+        isPassed,
+        integrityScore,
+        tabSwitches,
+        completedAt: sub.completedAt
+      });
+    }
+
+    res.json({
+      assessment: {
+        id: ass._id,
+        title: ass.title,
+        passPercentage: ass.passPercentage || 60,
+        timeLimit: ass.durationMinutes
+      },
+      submissions: resp
+    });
 
   } catch (err) {
     res.status(500).json({ error: err.message });

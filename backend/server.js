@@ -82,6 +82,7 @@ app.use('/api/assessments', require('./routes/assessments'));
 app.use('/api/interviews', require('./routes/interviews'));
 app.use('/api/offers', require('./routes/offers'));
 app.use('/api/roadmaps', require('./routes/roadmaps'));
+app.use('/api/matches', require('./routes/matches'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/notifications', require('./routes/notifications'));
 

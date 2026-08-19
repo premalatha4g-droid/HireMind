@@ -29,11 +29,14 @@ const BrowseJobs = () => {
     setError('');
     try {
       const jobsData = await apiFetch('/api/jobs');
-      // Filter out drafts, only show active jobs
-      setJobs(jobsData.filter(j => j.status === 'ACTIVE'));
+      setJobs(Array.isArray(jobsData) ? jobsData.filter(j => j.status === 'ACTIVE') : []);
       
-      const appsData = await apiFetch('/api/assessments/my-applications');
-      setApplications(appsData);
+      try {
+        const appsData = await apiFetch('/api/assessments/my-applications');
+        setApplications(Array.isArray(appsData) ? appsData : []);
+      } catch (e) {
+        setApplications([]);
+      }
     } catch (err) {
       setError(err.message || 'Failed to fetch jobs.');
     } finally {
@@ -66,11 +69,17 @@ const BrowseJobs = () => {
   };
 
   const isApplied = (jobId) => {
-    return applications.some(app => app.job.id === jobId);
+    return applications.some(app => 
+      (app.jobId && app.jobId.toString() === jobId.toString()) || 
+      (app.job && (app.job.id === jobId || app.job._id === jobId))
+    );
   };
 
   const getApplication = (jobId) => {
-    return applications.find(app => app.job.id === jobId);
+    return applications.find(app => 
+      (app.jobId && app.jobId.toString() === jobId.toString()) || 
+      (app.job && (app.job.id === jobId || app.job._id === jobId))
+    );
   };
 
   const filteredJobs = jobs.filter(job => {

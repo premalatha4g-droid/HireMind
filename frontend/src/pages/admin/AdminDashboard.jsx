@@ -190,10 +190,10 @@ const AdminDashboard = () => {
                 <div className="space-y-4 font-semibold text-slate-650 text-xs">
                   {[
                     { label: 'Applied to Screening', val: stats.funnelConversion?.appliedToScreening, color: 'bg-indigo-500' },
-                    { label: 'Screening to Shortlisted', val: stats.funnelConversion?.screeningToShortlisted, color: 'bg-blue-500' },
-                    { label: 'Shortlisted to Interview', val: stats.funnelConversion?.shortlistedToInterview, color: 'bg-purple-500' },
-                    { label: 'Interview to Assessment', val: stats.funnelConversion?.interviewToAssessment, color: 'bg-pink-500' },
-                    { label: 'Assessment to Offer', val: stats.funnelConversion?.assessmentToOffer, color: 'bg-amber-500' },
+                    { label: 'Screening to Assessment', val: stats.funnelConversion?.screeningToAssessment, color: 'bg-blue-500' },
+                    { label: 'Assessment to Shortlisted', val: stats.funnelConversion?.assessmentToShortlisted, color: 'bg-purple-500' },
+                    { label: 'Shortlisted to Interview', val: stats.funnelConversion?.shortlistedToInterview, color: 'bg-pink-500' },
+                    { label: 'Interview to Offer', val: stats.funnelConversion?.interviewToOffer, color: 'bg-amber-500' },
                     { label: 'Offer to Hired', val: stats.funnelConversion?.offerToHired, color: 'bg-emerald-500' }
                   ].map((f, idx) => (
                     <div key={idx} className="space-y-1">
@@ -320,8 +320,8 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-semibold text-slate-650">
-                    {stats.jobWiseStats?.map((job) => (
-                      <tr key={job.jobId} className="hover:bg-slate-50/50">
+                    {stats.jobWiseStats?.map((job, idx) => (
+                      <tr key={job.jobId || job.id || idx} className="hover:bg-slate-50/50">
                         <td className="p-3.5 font-bold text-slate-900">{job.title}</td>
                         <td className="p-3.5 text-slate-500">{job.company}</td>
                         <td className="p-3.5">
@@ -330,14 +330,14 @@ const AdminDashboard = () => {
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
                               : 'bg-slate-100 text-slate-600 border-slate-200'
                           }`}>
-                            {job.status}
+                            {job.status || 'ACTIVE'}
                           </span>
                         </td>
-                        <td className="p-3.5 text-center text-slate-900 font-black">{job.totalApplications}</td>
-                        <td className="p-3.5 text-center text-slate-700">{job.offersSent}</td>
-                        <td className="p-3.5 text-center text-emerald-600 font-black">{job.hiresCompleted}</td>
-                        <td className="p-3.5 text-center text-indigo-650 font-black">{job.averageMatchScore}%</td>
-                        <td className="p-3.5 text-center text-emerald-650 font-black">{job.averageReadinessScore}%</td>
+                        <td className="p-3.5 text-center text-slate-900 font-black">{job.totalApplications ?? job.applicationCount ?? 0}</td>
+                        <td className="p-3.5 text-center text-slate-700">{job.offersSent ?? 0}</td>
+                        <td className="p-3.5 text-center text-emerald-600 font-black">{job.hiresCompleted ?? 0}</td>
+                        <td className="p-3.5 text-center text-indigo-650 font-black">{job.averageMatchScore ?? job.averageScore ?? 0}%</td>
+                        <td className="p-3.5 text-center text-emerald-600 font-black">{job.averageReadinessScore ?? 0}%</td>
                       </tr>
                     ))}
 

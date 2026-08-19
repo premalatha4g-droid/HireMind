@@ -199,8 +199,8 @@ const QuestionSchema = new mongoose.Schema({
 const TestCaseSchema = new mongoose.Schema({
   _id: uuidField,
   questionId: { type: String, required: true },
-  input: { type: String, required: true },
-  expectedOutput: { type: String, required: true }
+  input: { type: String, default: '[]' },
+  expectedOutput: { type: String, default: '' }
 }, { toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 // 15. Submission Schema

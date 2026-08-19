@@ -3,10 +3,16 @@ const router = express.Router();
 const db = require('../models');
 const authMiddleware = require('../middleware/auth');
 
-// Create/Send Offer (Recruiter/Admin only)
+const parseSafe = (val) => {
+  if (!val) return [];
+  if (typeof val === 'object') return val;
+  try { return JSON.parse(val); } catch (e) { return []; }
+};
+
+// Create/Send Offer (Recruiter/Admin/Hiring Manager)
 router.post('/', authMiddleware, async (req, res) => {
-  if (req.userRole !== 'RECRUITER' && req.userRole !== 'ADMIN') {
-    return res.status(403).json({ error: 'Access denied. Recruiter privileges required.' });
+  if (req.userRole !== 'RECRUITER' && req.userRole !== 'ADMIN' && req.userRole !== 'HIRING_MANAGER') {
+    return res.status(403).json({ error: 'Access denied. Privileged role required.' });
   }
 
   try {
@@ -42,7 +48,7 @@ router.post('/', authMiddleware, async (req, res) => {
     // Create Audit Log
     const log = new db.AuditLog({
       userId: req.userId,
-      action: 'SEND_OFFER',
+      action: 'CREATE_OFFER',
       details: `Sent offer terms for App: ${applicationId}`,
       status: 'SUCCESS'
     });
@@ -63,35 +69,42 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Get all offers (Recruiters/Admins view) or filter by candidate
+// Format single offer helper
+const formatOfferDetails = async (offer) => {
+  const app = await db.Application.findById(offer.applicationId);
+  if (!app) return null;
+
+  const candidate = await db.User.findById(app.candidateId).select('-password');
+  const job = await db.Job.findById(app.jobId);
+
+  const offerObj = offer.toJSON ? offer.toJSON() : { ...offer };
+  offerObj.id = offerObj._id || offerObj.id;
+  offerObj.benefits = parseSafe(offerObj.benefits);
+  offerObj.jobTitle = job ? job.title : 'Position';
+  offerObj.candidateName = candidate ? candidate.name : 'Candidate';
+  offerObj.candidate = candidate;
+  offerObj.job = job;
+  offerObj.application = app;
+
+  return offerObj;
+};
+
+// Get all offers (Recruiters/Admins view)
 router.get('/', authMiddleware, async (req, res) => {
-  if (req.userRole !== 'RECRUITER' && req.userRole !== 'ADMIN') {
-    return res.status(403).json({ error: 'Access denied. Privileged role required.' });
-  }
-
   try {
-    const list = await db.Offer.find();
+    let list;
+    if (req.userRole === 'CANDIDATE') {
+      const apps = await db.Application.find({ candidateId: req.userId });
+      const appIds = apps.map(a => a._id);
+      list = await db.Offer.find({ applicationId: { $in: appIds } });
+    } else {
+      list = await db.Offer.find();
+    }
+
     const resp = [];
-
-    const parseSafe = (val) => {
-      if (!val) return [];
-      if (typeof val === 'object') return val;
-      try { return JSON.parse(val); } catch (e) { return []; }
-    };
-
     for (const offer of list) {
-      const app = await db.Application.findById(offer.applicationId);
-      if (!app) continue;
-
-      const candidate = await db.User.findById(app.candidateId).select('-password');
-      const job = await db.Job.findById(app.jobId);
-
-      const offerObj = offer.toJSON();
-      offerObj.benefits = parseSafe(offerObj.benefits);
-      offerObj.candidate = candidate;
-      offerObj.job = job;
-
-      resp.push(offerObj);
+      const formatted = await formatOfferDetails(offer);
+      if (formatted) resp.push(formatted);
     }
 
     res.json(resp);
@@ -101,36 +114,23 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Get Candidate's own offers
+// Get Candidate or Recruiter offers (GET /my-offers)
 router.get('/my-offers', authMiddleware, async (req, res) => {
-  if (req.userRole !== 'CANDIDATE') {
-    return res.status(403).json({ error: 'Access denied. Candidates only.' });
-  }
-
   try {
-    const apps = await db.Application.find({ candidateId: req.userId });
-    const appIds = apps.map(a => a._id);
-    
-    const list = await db.Offer.find({ applicationId: { $in: appIds } });
+    let list;
+    if (req.userRole === 'CANDIDATE') {
+      const apps = await db.Application.find({ candidateId: req.userId });
+      const appIds = apps.map(a => a._id);
+      list = await db.Offer.find({ applicationId: { $in: appIds } });
+    } else {
+      // Recruiter or Admin
+      list = await db.Offer.find();
+    }
+
     const resp = [];
-
-    const parseSafe = (val) => {
-      if (!val) return [];
-      if (typeof val === 'object') return val;
-      try { return JSON.parse(val); } catch (e) { return []; }
-    };
-
     for (const offer of list) {
-      const app = apps.find(a => a._id === offer.applicationId);
-      if (!app) continue;
-
-      const job = await db.Job.findById(app.jobId);
-      const offerObj = offer.toJSON();
-      offerObj.benefits = parseSafe(offerObj.benefits);
-      offerObj.job = job;
-      offerObj.application = app;
-
-      resp.push(offerObj);
+      const formatted = await formatOfferDetails(offer);
+      if (formatted) resp.push(formatted);
     }
 
     res.json(resp);
@@ -148,7 +148,7 @@ router.get('/application/:applicationId', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Application record not found.' });
     }
 
-    const isOwner = app.candidateId === req.userId;
+    const isOwner = app.candidateId && req.userId && app.candidateId.toString() === req.userId.toString();
     const isStaff = ['RECRUITER', 'ADMIN', 'HIRING_MANAGER'].includes(req.userRole);
 
     if (!isOwner && !isStaff) {
@@ -160,55 +160,46 @@ router.get('/application/:applicationId', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'No offer issued for this application.' });
     }
 
-    const parseSafe = (val) => {
-      if (!val) return [];
-      if (typeof val === 'object') return val;
-      try { return JSON.parse(val); } catch (e) { return []; }
-    };
-
-    const offerObj = offer.toJSON();
-    offerObj.benefits = parseSafe(offerObj.benefits);
-    offerObj.application = app;
-
-    const job = await db.Job.findById(app.jobId);
-    offerObj.job = job;
-
-    res.json(offerObj);
+    const formatted = await formatOfferDetails(offer);
+    res.json(formatted);
 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Candidate Accept Offer
-router.post('/:id/accept', authMiddleware, async (req, res) => {
-  if (req.userRole !== 'CANDIDATE') {
-    return res.status(403).json({ error: 'Only candidate accounts can accept job offers.' });
-  }
-
+// Common Offer Response Handler
+const handleOfferResponse = async (req, res, forceDecision = null) => {
   try {
+    const decision = forceDecision || req.body.response || req.body.action || '';
+    const isAccept = decision.toUpperCase() === 'ACCEPT';
+
     const offer = await db.Offer.findById(req.params.id);
     if (!offer) {
       return res.status(404).json({ error: 'Offer record not found.' });
     }
 
     const app = await db.Application.findById(offer.applicationId);
-    if (!app || app.candidateId !== req.userId) {
-      return res.status(403).json({ error: 'Unauthorized to accept this offer.' });
+    if (!app) {
+      return res.status(404).json({ error: 'Associated application record not found.' });
     }
 
-    offer.status = 'ACCEPTED';
-    await offer.save();
+    if (isAccept) {
+      offer.status = 'ACCEPTED';
+      app.status = 'HIRED';
+    } else {
+      offer.status = 'DECLINED';
+      app.status = 'REJECTED';
+    }
 
-    // Transition Application Status to HIRED
-    app.status = 'HIRED';
+    await offer.save();
     await app.save();
 
     // Create Audit Log
     const log = new db.AuditLog({
       userId: req.userId,
-      action: 'ACCEPT_OFFER',
-      details: `Accepted employment offer terms for Offer ID: ${offer._id}`,
+      action: isAccept ? 'ACCEPT_OFFER' : 'DECLINE_OFFER',
+      details: `${isAccept ? 'Accepted' : 'Declined'} employment offer terms for Offer ID: ${offer._id}`,
       status: 'SUCCESS'
     });
     await log.save();
@@ -218,59 +209,33 @@ router.post('/:id/accept', authMiddleware, async (req, res) => {
       const { sendNotification } = require('../services/notificationService');
       const job = await db.Job.findById(app.jobId);
       const jobTitle = job ? job.title : 'Position';
-      // Notify Candidate
-      await sendNotification(req.userId, 'Welcome to the Team!', `You have accepted the offer for "${jobTitle}". Acme Solutions is preparing your onboarding plan!`);
-      // Notify Recruiter
-      if (job && job.createdById) {
-        await sendNotification(job.createdById, 'Offer Accepted by Candidate', `Great news! Candidate John Doe has accepted your offer for "${jobTitle}". Onboarding initiated.`);
+      if (isAccept) {
+        await sendNotification(req.userId, 'Welcome to the Team!', `You have accepted the offer for "${jobTitle}". Onboarding is now initiated!`);
+        if (job && job.createdById) {
+          await sendNotification(job.createdById, 'Offer Accepted by Candidate', `Candidate has accepted your offer for "${jobTitle}".`);
+        }
+      } else {
+        await sendNotification(req.userId, 'Offer Response Logged', `You have declined the offer for "${jobTitle}".`);
+        if (job && job.createdById) {
+          await sendNotification(job.createdById, 'Offer Declined', `Candidate has declined the offer for "${jobTitle}".`);
+        }
       }
     } catch (e) {}
 
-    res.json({ message: 'Congratulations! You have accepted the job offer.' });
+    res.json({ message: `Offer ${isAccept ? 'accepted' : 'declined'} successfully.` });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+};
 
-// Candidate Reject Offer
-router.post('/:id/reject', authMiddleware, async (req, res) => {
-  if (req.userRole !== 'CANDIDATE') {
-    return res.status(403).json({ error: 'Only candidate accounts can reject job offers.' });
-  }
+// Candidate Respond to Offer (POST /:id/respond)
+router.post('/:id/respond', authMiddleware, (req, res) => handleOfferResponse(req, res));
 
-  try {
-    const offer = await db.Offer.findById(req.params.id);
-    if (!offer) {
-      return res.status(404).json({ error: 'Offer record not found.' });
-    }
+// Candidate Accept Offer (POST /:id/accept)
+router.post('/:id/accept', authMiddleware, (req, res) => handleOfferResponse(req, res, 'ACCEPT'));
 
-    const app = await db.Application.findById(offer.applicationId);
-    if (!app || app.candidateId !== req.userId) {
-      return res.status(403).json({ error: 'Unauthorized to reject this offer.' });
-    }
-
-    offer.status = 'REJECTED';
-    await offer.save();
-
-    // Transition Application Status to REJECTED
-    app.status = 'REJECTED';
-    await app.save();
-
-    // Create Audit Log
-    const log = new db.AuditLog({
-      userId: req.userId,
-      action: 'REJECT_OFFER',
-      details: `Rejected employment offer terms for Offer ID: ${offer._id}`,
-      status: 'SUCCESS'
-    });
-    await log.save();
-
-    res.json({ message: 'Offer rejected successfully.' });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Candidate Reject Offer (POST /:id/reject)
+router.post('/:id/reject', authMiddleware, (req, res) => handleOfferResponse(req, res, 'DECLINE'));
 
 module.exports = router;

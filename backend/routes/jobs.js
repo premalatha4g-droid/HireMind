@@ -33,11 +33,25 @@ const formatJobAnalysis = (analysis) => {
   };
 };
 
-// Get all Active Jobs
+// Get all Jobs (populates skills on each job)
 router.get('/', async (req, res) => {
   try {
-    const list = await db.Job.find({ status: 'ACTIVE' }).sort({ createdAt: -1 });
-    res.json(list);
+    const filter = {};
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+
+    const list = await db.Job.find(filter).sort({ createdAt: -1 });
+    const formattedJobs = [];
+
+    for (const j of list) {
+      const jobObj = j.toJSON();
+      const skills = await db.JobSkill.find({ jobId: j._id });
+      jobObj.skills = skills;
+      formattedJobs.push(jobObj);
+    }
+
+    res.json(formattedJobs);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -147,25 +161,101 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Publish a Job
+// Update Job helper
+const updateJobAndAnalysis = async (jobId, body, setStatus = null) => {
+  const job = await db.Job.findById(jobId);
+  if (!job) return null;
+
+  if (body.title) job.title = body.title;
+  if (body.company) job.company = body.company;
+  if (body.description) job.description = body.description;
+  if (body.location) job.location = body.location;
+  if (body.employmentType) job.employmentType = body.employmentType;
+  if (body.experienceYears !== undefined) job.experienceYears = parseInt(body.experienceYears) || 0;
+  if (body.salary) job.salary = body.salary;
+  if (setStatus) job.status = setStatus;
+
+  const savedJob = await job.save();
+
+  // Update JobAnalysis if provided
+  let analysis = await db.JobAnalysis.findOne({ jobId: job._id });
+  if (analysis) {
+    if (body.summary !== undefined) analysis.summary = body.summary;
+    if (body.responsibilities !== undefined) analysis.responsibilities = JSON.stringify(body.responsibilities);
+    if (body.requiredSkills !== undefined) analysis.requiredSkills = JSON.stringify(body.requiredSkills);
+    if (body.preferredSkills !== undefined) analysis.preferredSkills = JSON.stringify(body.preferredSkills);
+    if (body.education !== undefined) analysis.education = body.education;
+    if (body.certifications !== undefined) analysis.certifications = JSON.stringify(body.certifications);
+    if (body.technologies !== undefined) analysis.technologies = JSON.stringify(body.technologies);
+    if (body.seniorityLevel !== undefined) analysis.seniorityLevel = body.seniorityLevel;
+    await analysis.save();
+  }
+
+  // Update JobSkill records if requiredSkills/preferredSkills provided
+  if (body.requiredSkills || body.preferredSkills) {
+    await db.JobSkill.deleteMany({ jobId: job._id });
+    if (Array.isArray(body.requiredSkills)) {
+      for (const s of body.requiredSkills) {
+        if (s) {
+          const js = new db.JobSkill({ jobId: job._id, skillName: String(s).trim(), isRequired: true });
+          await js.save();
+        }
+      }
+    }
+    if (Array.isArray(body.preferredSkills)) {
+      for (const s of body.preferredSkills) {
+        if (s) {
+          const js = new db.JobSkill({ jobId: job._id, skillName: String(s).trim(), isRequired: false });
+          await js.save();
+        }
+      }
+    }
+  }
+
+  return savedJob;
+};
+
+// Update an existing Job (PUT /:id)
+router.put('/:id', authMiddleware, async (req, res) => {
+  if (req.userRole !== 'RECRUITER' && req.userRole !== 'ADMIN') {
+    return res.status(403).json({ error: 'Access denied. Recruiter privileges required.' });
+  }
+  try {
+    const savedJob = await updateJobAndAnalysis(req.params.id, req.body);
+    if (!savedJob) {
+      return res.status(404).json({ error: 'Job listing not found.' });
+    }
+
+    const log = new db.AuditLog({
+      userId: req.userId,
+      action: 'UPDATE_JOB',
+      details: `Updated Job ID: ${savedJob._id}`,
+      status: 'SUCCESS'
+    });
+    await log.save();
+
+    res.json({ message: 'Job listing updated successfully.', job: savedJob });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Publish a Job (PUT /:id/publish)
 router.put('/:id/publish', authMiddleware, async (req, res) => {
   if (req.userRole !== 'RECRUITER' && req.userRole !== 'ADMIN') {
     return res.status(403).json({ error: 'Access denied. Recruiter privileges required.' });
   }
   try {
-    const job = await db.Job.findById(req.params.id);
-    if (!job) {
+    const savedJob = await updateJobAndAnalysis(req.params.id, req.body, 'ACTIVE');
+    if (!savedJob) {
       return res.status(404).json({ error: 'Job listing not found.' });
     }
-
-    job.status = 'ACTIVE';
-    const savedJob = await job.save();
 
     // Log action
     const log = new db.AuditLog({
       userId: req.userId,
       action: 'PUBLISH_JOB',
-      details: `Published Job ID: ${job._id}`,
+      details: `Published Job ID: ${savedJob._id}`,
       status: 'SUCCESS'
     });
     await log.save();
@@ -186,6 +276,19 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     if (!job) {
       return res.status(404).json({ error: 'Job listing not found.' });
     }
+    await db.JobAnalysis.deleteMany({ jobId: req.params.id });
+    await db.JobSkill.deleteMany({ jobId: req.params.id });
+    await db.Assessment.deleteMany({ jobId: req.params.id });
+
+    // Log action
+    const log = new db.AuditLog({
+      userId: req.userId,
+      action: 'DELETE_JOB',
+      details: `Deleted Job ID: ${req.params.id}`,
+      status: 'SUCCESS'
+    });
+    await log.save();
+
     res.json({ message: 'Job listing deleted successfully.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -194,10 +297,6 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 
 // Apply for Job
 router.post('/:id/apply', authMiddleware, async (req, res) => {
-  if (req.userRole !== 'CANDIDATE') {
-    return res.status(403).json({ error: 'Only candidate accounts can submit applications.' });
-  }
-
   try {
     const jobId = req.params.id;
     const job = await db.Job.findById(jobId);

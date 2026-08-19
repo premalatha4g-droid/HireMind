@@ -32,16 +32,34 @@ const InterviewWorkspace = () => {
   const [interviewers, setInterviewers] = useState([]);
 
   // Form State
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
   const [interviewerId, setInterviewerId] = useState('');
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
+  const [date, setDate] = useState(tomorrow);
+  const [time, setTime] = useState('10:00');
   const [type, setType] = useState('TECHNICAL');
-  const [meetingLink, setMeetingLink] = useState('');
+  const [meetingLink, setMeetingLink] = useState('https://meet.google.com/hiremind-session');
   
-  // Questions list
-  const [questions, setQuestions] = useState([]);
+  // Assessment status
+  const [candidateAssessment, setCandidateAssessment] = useState(null);
+  const [candidateSubmissions, setCandidateSubmissions] = useState([]);
+
+  // Questions list - Initialized with high-quality default questions
+  const [questions, setQuestions] = useState([
+    {
+      question: 'Explain architectural best practices for asynchronous request handling and state synchronization.',
+      category: 'TECHNICAL',
+      difficulty: 'MEDIUM',
+      evaluationCriteria: 'Listen for event queues, idempotency, and concurrency safety.'
+    },
+    {
+      question: 'Describe how you troubleshoot latency bottlenecks across database queries and network services.',
+      category: 'PROJECT_DEEP_DIVE',
+      difficulty: 'MEDIUM',
+      evaluationCriteria: 'Look for query profiling, indexing strategies, caching mechanisms, and connection pooling.'
+    }
+  ]);
   const [isRealAI, setIsRealAI] = useState(false);
-  const [hasGenerated, setHasGenerated] = useState(false);
+  const [hasGenerated, setHasGenerated] = useState(true);
 
   const fetchWorkspaceData = async () => {
     setLoading(true);
@@ -65,6 +83,14 @@ const InterviewWorkspace = () => {
       if (staffList.length > 0) {
         setInterviewerId(staffList[0].id);
       }
+
+      // 3. Fetch candidate assessment details
+      try {
+        const assData = await apiFetch(`/api/assessments/job/${jobId}`);
+        setCandidateAssessment(assData);
+        const subs = await apiFetch(`/api/assessments/submissions/application/${applicationId}`);
+        setCandidateSubmissions(subs || []);
+      } catch (e) {}
     } catch (err) {
       setError(err.message || 'Failed to initialize scheduling workspace.');
     } finally {
@@ -120,13 +146,18 @@ const InterviewWorkspace = () => {
   const handleScheduleSubmit = async (e) => {
     e.preventDefault();
     if (!interviewerId || !date || !time || !type) {
-      setError('Please fill in all scheduling requirements.');
+      setError('Please fill in all scheduling requirements (Interviewer, Date, and Time).');
       return;
     }
-    if (questions.length === 0) {
-      setError('Please add or generate at least one evaluation question before scheduling.');
-      return;
-    }
+    
+    const finalQuestions = questions.length > 0 ? questions : [
+      {
+        question: 'Explain architectural best practices for asynchronous request handling and state synchronization.',
+        category: 'TECHNICAL',
+        difficulty: 'MEDIUM',
+        evaluationCriteria: 'Listen for event queues, idempotency, and concurrency safety.'
+      }
+    ];
 
     setLoading(true);
     setError('');
@@ -140,7 +171,7 @@ const InterviewWorkspace = () => {
           time,
           type,
           meetingLink,
-          questions
+          questions: finalQuestions
         })
       });
       alert('Interview scheduled and customized questions saved successfully!');
@@ -202,21 +233,59 @@ const InterviewWorkspace = () => {
               <span>Schedule Details</span>
             </h3>
 
-            {/* Candidate summary panel */}
-            <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-150 text-xs space-y-2">
-              <p className="font-bold text-slate-900 text-sm">{application?.application?.candidate?.name}</p>
-              <span className="text-slate-500 font-semibold block">{application?.application?.candidate?.email}</span>
-              <div className="flex space-x-4 pt-1.5 border-t border-slate-200 mt-1.5">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Match Score</span>
-                  <span className="text-indigo-600 font-extrabold">{application?.overallScore}%</span>
+            {/* Candidate summary panel with Assessment Score & Status */}
+            {(() => {
+              const hasSubmission = candidateSubmissions && candidateSubmissions.length > 0;
+              const passThreshold = candidateAssessment?.passPercentage || 60;
+              let totalPoints = 0;
+              let scoredPoints = 0;
+              if (hasSubmission) {
+                candidateSubmissions.forEach(s => {
+                  totalPoints += (s.question?.points || 10);
+                  scoredPoints += (s.scoreObtained || 0);
+                });
+              }
+              const candidateScore = totalPoints > 0 ? Math.round((scoredPoints / totalPoints) * 100) : (hasSubmission ? 100 : 0);
+              const isPassed = hasSubmission && candidateScore >= passThreshold;
+
+              return (
+                <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-150 text-xs space-y-2">
+                  <p className="font-bold text-slate-900 text-sm">{application?.application?.candidate?.name}</p>
+                  <span className="text-slate-500 font-semibold block">{application?.application?.candidate?.email}</span>
+                  <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-200 mt-1.5">
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Match Score</span>
+                      <span className="text-indigo-600 font-extrabold">{application?.overallScore}%</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Readiness</span>
+                      <span className="text-emerald-600 font-extrabold">{application?.application?.readinessScore || 0}%</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Assessment</span>
+                      {hasSubmission ? (
+                        <span className={`font-extrabold ${isPassed ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {candidateScore}% {isPassed ? '✓' : '✗'}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-extrabold">Pending</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {candidateAssessment && !hasSubmission && (
+                    <div className="p-2 bg-amber-50 border border-amber-200 rounded text-amber-800 text-[11px] font-semibold mt-2">
+                      ⚠️ Candidate has not completed the required coding challenge ({candidateAssessment.title}). Completing the assessment is required before interview.
+                    </div>
+                  )}
+                  {hasSubmission && !isPassed && (
+                    <div className="p-2 bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold mt-2">
+                      ⚠️ Candidate scored {candidateScore}% (Cutoff: {passThreshold}%).
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Readiness</span>
-                  <span className="text-emerald-600 font-extrabold">{application?.application?.readinessScore || 0}%</span>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Fields */}
             <div className="space-y-3.5 text-xs">

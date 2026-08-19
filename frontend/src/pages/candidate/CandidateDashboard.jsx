@@ -40,21 +40,26 @@ const CandidateDashboard = () => {
       // 1. Fetch Resume info
       try {
         const resumeRes = await apiFetch('/api/resumes/me');
-        if (resumeRes.resume) {
+        if (resumeRes && resumeRes.resume) {
           setHasResume(true);
           setResumeData(resumeRes);
           setSkillsCount(resumeRes.skillEvidences?.length || 0);
+        } else {
+          setHasResume(false);
         }
       } catch (e) {
         setHasResume(false);
       }
 
       // 2. Fetch candidate applications and submissions
-      const appsRes = await apiFetch('/api/assessments/my-applications');
-      setApplications(appsRes);
+      try {
+        const appsRes = await apiFetch('/api/assessments/my-applications');
+        setApplications(Array.isArray(appsRes) ? appsRes : []);
+      } catch (e) {
+        setApplications([]);
+      }
     } catch (err) {
       console.error('Failed to load candidate metrics:', err);
-      setError('Failed to retrieve active job applications.');
     } finally {
       setLoading(false);
     }
@@ -71,7 +76,7 @@ const CandidateDashboard = () => {
 
   // Helper to map application status to visual stage index
   const getStageStatusIndex = (status) => {
-    const stagesList = ['APPLIED', 'SCREENING', 'SHORTLISTED', 'INTERVIEW', 'ASSESSMENT', 'OFFER', 'HIRED'];
+    const stagesList = ['APPLIED', 'SCREENING', 'ASSESSMENT', 'SHORTLISTED', 'INTERVIEW', 'OFFER', 'HIRED'];
     const idx = stagesList.indexOf(status);
     return idx !== -1 ? idx : 0;
   };
@@ -176,59 +181,60 @@ const CandidateDashboard = () => {
             </div>
 
             <div className="space-y-5">
-              {applications.map((app) => {
-                const jobHasTest = app.job.assessment;
-                const submission = app.submissions.find(s => s.assessmentId === jobHasTest?.id);
+              {applications.filter(app => !!app && !!app.job).map((app) => {
+                const jobHasTest = app.job?.assessment;
+                const submission = (app.submissions || []).find(s => s.assessmentId === jobHasTest?.id);
                 const activeStageIdx = getStageStatusIndex(app.status);
 
                 const stagesList = [
                   { name: 'Applied', idx: 0 },
-                  { name: 'Screening', idx: 1 },
-                  { name: 'Shortlisted', idx: 2 },
-                  { name: 'Interview', idx: 3 },
-                  { name: 'Assessment', idx: 4 },
-                  { name: 'Offer', idx: 5 },
-                  { name: 'Hired', idx: 6 }
+                  { name: 'AI Screening', idx: 1 },
+                  { name: 'Coding Sandbox', idx: 2 },
+                  { name: 'Skill Gap Healing', idx: 3 },
+                  { name: 'Tech Interview', idx: 4 },
+                  { name: 'Job Offer', idx: 5 }
                 ];
 
                 return (
-                  <div key={app.id} className="p-4 border border-slate-150 rounded-xl bg-slate-50/50 space-y-4">
+                  <div key={app.id} className="p-5 border border-slate-200/80 rounded-2xl bg-white space-y-4 shadow-xs hover:shadow-md transition-shadow">
                     {/* Header */}
                     <div className="flex justify-between items-start gap-4">
                       <div>
-                        <h4 className="text-xs font-black text-slate-950 uppercase tracking-tight">{app.job.title}</h4>
-                        <span className="text-[10px] text-slate-400 font-bold block uppercase mt-0.5">{app.job.company}</span>
+                        <h4 className="text-sm font-black text-slate-900 tracking-tight">{app.job?.title || 'Position'}</h4>
+                        <span className="text-xs text-indigo-600 font-bold block uppercase mt-0.5">{app.job?.company || 'Company'}</span>
                       </div>
                       
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        app.status === 'REJECTED' 
-                          ? 'bg-rose-50 text-rose-700 border-rose-100'
-                          : 'bg-indigo-50 text-indigo-700 border-indigo-100 animate-pulse'
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                        app.status === 'HIRED' || app.status === 'OFFER'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : app.status === 'SHORTLISTED'
+                          ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
+                          : 'bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse'
                       }`}>
-                        {app.status}
+                        ● {app.status}
                       </span>
                     </div>
 
-                    {/* Progress Pipeline Dots */}
-                    {app.status !== 'REJECTED' && (
-                      <div className="flex justify-between items-center py-2 relative px-2">
+                    {/* Progress Pipeline Stepper */}
+                    <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-100">
+                      <div className="flex justify-between items-center py-1 relative px-1">
                         {stagesList.map((stage) => {
                           const done = activeStageIdx >= stage.idx;
                           const current = activeStageIdx === stage.idx;
                           
                           return (
                             <div key={stage.idx} className="flex flex-col items-center z-10">
-                              <div className={`h-6 w-6 rounded-full flex items-center justify-center font-bold text-[9px] border ${
+                              <div className={`h-6 w-6 rounded-full flex items-center justify-center font-bold text-[9px] border transition-all ${
                                 done 
-                                  ? 'bg-emerald-600 border-emerald-500 text-white' 
+                                  ? 'bg-emerald-600 border-emerald-500 text-white shadow-xs' 
                                   : current 
-                                  ? 'bg-indigo-50 border-2 border-indigo-600 text-indigo-600' 
+                                  ? 'bg-indigo-600 border-2 border-indigo-400 text-white ring-2 ring-indigo-200' 
                                   : 'bg-white border-slate-200 text-slate-400'
                               }`}>
-                                {stage.idx + 1}
+                                {done ? '✓' : stage.idx + 1}
                               </div>
-                              <span className={`text-[9px] font-extrabold mt-1 uppercase ${
-                                done || current ? 'text-slate-800' : 'text-slate-400'
+                              <span className={`text-[9px] font-extrabold mt-1 text-center truncate max-w-[65px] ${
+                                done ? 'text-emerald-700' : current ? 'text-indigo-700' : 'text-slate-400'
                               }`}>
                                 {stage.name}
                               </span>
@@ -236,62 +242,62 @@ const CandidateDashboard = () => {
                           );
                         })}
                       </div>
-                    )}
+                    </div>
 
                     {/* Coding assessment triggers */}
                     {jobHasTest && (
-                      <div className="mt-3 pt-3 border-t border-slate-200/80 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-                        <div className="flex items-center space-x-2 text-xs font-semibold text-slate-600">
-                          <Terminal className="h-4.5 w-4.5 text-indigo-600" />
-                          <span>Coding Challenge: <span className="font-bold text-slate-800">{jobHasTest.title}</span> ({jobHasTest.timeLimit} mins)</span>
+                      <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                        <div className="flex items-center space-x-2 text-xs font-semibold text-slate-700">
+                          <Terminal className="h-4 w-4 text-indigo-600" />
+                          <span>Coding Challenge: <span className="font-bold text-slate-900">{jobHasTest.title}</span> ({jobHasTest.timeLimit} mins)</span>
                         </div>
 
                         {submission ? (
                           <span className="text-[10px] font-extrabold text-emerald-600 bg-emerald-50 border border-emerald-100 p-1.5 px-3 rounded-lg flex items-center space-x-1 uppercase">
                             <CheckCircle className="h-3.5 w-3.5" />
-                            <span>Submitted (Grade: {submission.score}%)</span>
+                            <span>Submitted ({submission.score}%)</span>
                           </span>
                         ) : (
                           <Link
-                            to={`/candidate/assessment/${app.job.id}`} // Resolves as assessment page using jobId parameter
-                            className="inline-flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-slate-950 font-black p-1.5 px-4.5 rounded-lg text-[10px] tracking-wide uppercase transition-colors hover:shadow-xs cursor-pointer"
+                            to={`/candidate/assessment/${app.job?.id || app.job?._id}`}
+                            className="inline-flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1.5 px-3.5 rounded-lg text-[10px] uppercase tracking-wide transition shadow-xs cursor-pointer"
                           >
-                            <span>Complete Coding Test</span>
-                            <ArrowRight className="h-3 w-3 text-slate-950" />
+                            <span>Launch Coding Sandbox</span>
+                            <ArrowRight className="h-3 w-3 text-white" />
                           </Link>
                         )}
                       </div>
                     )}
 
-                    {/* Upskilling and Offer Actions Row */}
-                    <div className="mt-3 pt-3 border-t border-slate-200/85 flex flex-wrap items-center justify-between gap-3">
-                      {app.status === 'OFFER' ? (
-                        <Link
-                          to={`/candidate/applications/${app.id}/offer`}
-                          className="inline-flex items-center space-x-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black p-1.5 px-4 rounded-lg text-[10px] tracking-wide uppercase transition-colors hover:shadow-xs cursor-pointer"
-                        >
-                          <FileCheck className="h-4 w-4 mr-0.5 text-slate-950" />
-                          <span>Review Offer Letter</span>
-                        </Link>
-                      ) : app.status === 'APPLIED' ? (
-                        <Link
-                          to={`/candidate/applications/${app.id}/ai-interview`}
-                          className="inline-flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-755 text-white font-bold p-1.5 px-3.5 rounded-lg text-[10px] tracking-wide uppercase transition-all shadow-sm cursor-pointer"
-                        >
-                          <Brain className="h-4 w-4 text-white" />
-                          <span>Take AI Pre-Screening</span>
-                        </Link>
-                      ) : (
-                        <div />
-                      )}
-                      
+                    {/* Skill Gap Healing & Action Buttons */}
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                       <Link
                         to={`/candidate/applications/${app.id}/roadmap`}
-                        className="inline-flex items-center space-x-1.5 bg-slate-50 border border-slate-250 hover:bg-slate-100 text-indigo-600 font-bold p-1.5 px-3.5 rounded-lg text-[10px] tracking-wide uppercase transition-all cursor-pointer"
+                        className="inline-flex items-center space-x-1.5 bg-gradient-to-r from-indigo-50 to-cyan-50 border border-indigo-200/80 hover:border-indigo-300 text-indigo-700 font-bold p-2 px-3.5 rounded-xl text-[11px] transition shadow-xs cursor-pointer"
                       >
-                        <BookOpen className="h-4 w-4 text-indigo-500" />
-                        <span>Syllabus Roadmap</span>
+                        <Sparkles className="h-3.5 w-3.5 text-cyan-600" />
+                        <span>⚡ Autonomous Skill-Gap Healing Track</span>
                       </Link>
+
+                      {app.status === 'OFFER' && (
+                        <Link
+                          to={`/candidate/applications/${app.id}/offer`}
+                          className="inline-flex items-center space-x-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black p-2 px-4 rounded-xl text-[11px] uppercase transition shadow-sm cursor-pointer"
+                        >
+                          <FileCheck className="h-4 w-4 mr-0.5 text-slate-950" />
+                          <span>Review Formal Offer Letter</span>
+                        </Link>
+                      )}
+
+                      {app.status === 'APPLIED' && (
+                        <Link
+                          to={`/candidate/applications/${app.id}/ai-interview`}
+                          className="inline-flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-2 px-3.5 rounded-xl text-[11px] uppercase transition shadow-sm cursor-pointer"
+                        >
+                          <Brain className="h-3.5 w-3.5 text-white" />
+                          <span>AI Pre-Screening</span>
+                        </Link>
+                      )}
                     </div>
                   </div>
                 );

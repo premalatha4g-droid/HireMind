@@ -40,7 +40,7 @@ const SkillPassport = () => {
       setAnalysis(data.analysis);
       setEvidences(data.skillEvidences || []);
     } catch (err) {
-      if (err.message && err.message.includes('No resume uploaded')) {
+      if (err.message && (err.message.includes('No resume') || err.message.includes('not found') || err.message.includes('404') || err.message.includes('expired') || err.message.includes('invalid') || err.message.includes('401'))) {
         setResume(null);
         setAnalysis(null);
         setEvidences([]);
@@ -168,12 +168,13 @@ const SkillPassport = () => {
     categories.forEach(cat => {
       if (!Array.isArray(cat.list)) return;
       cat.list.forEach(skill => {
+        if (!skill) return;
         // Find matching evidence records in database for this skill
-        const skillEvs = evidences.filter(e => e.skillName.toLowerCase() === skill.toLowerCase());
+        const skillEvs = (evidences || []).filter(e => e && e.skillName && e.skillName.toLowerCase() === skill.toLowerCase());
         
         // Determine overall confidence
         let confidence = 'MEDIUM';
-        if (skillEvs.some(e => e.confidence === 'HIGH')) {
+        if (skillEvs.some(e => e && e.confidence === 'HIGH')) {
           confidence = 'HIGH';
         } else if (skillEvs.length === 0) {
           confidence = 'LOW';
@@ -182,7 +183,7 @@ const SkillPassport = () => {
         passportItems.push({
           name: skill,
           category: cat.label,
-          evidenceSources: skillEvs.map(e => e.source),
+          evidenceSources: skillEvs.map(e => e.source).filter(Boolean),
           confidence
         });
       });

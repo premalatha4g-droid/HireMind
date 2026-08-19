@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const BASE_URL = 'http://localhost:5001';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 const RESUME_PATH = 'c:/Users/Premalatha/OneDrive/Desktop/Project/John_Doe_Resume.pdf'; // Use existing resume file for parsing simulation
 
 async function runSecondTest() {

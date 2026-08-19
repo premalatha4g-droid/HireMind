@@ -13,7 +13,8 @@ import {
   Clock,
   Layers,
   HelpCircle,
-  FileCode
+  FileCode,
+  Award
 } from 'lucide-react';
 
 const AssessmentBuilder = () => {
@@ -31,6 +32,7 @@ const AssessmentBuilder = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [timeLimit, setTimeLimit] = useState(45);
+  const [passPercentage, setPassPercentage] = useState(60);
   const [questions, setQuestions] = useState([]);
 
   const fetchAssessmentData = async () => {
@@ -46,6 +48,7 @@ const AssessmentBuilder = () => {
         setTitle(assessment.title);
         setDescription(assessment.description);
         setTimeLimit(assessment.timeLimit);
+        setPassPercentage(assessment.passPercentage !== undefined ? assessment.passPercentage : 60);
         
         // Parse test cases JSON string back to arrays
         const parsedQuestions = assessment.questions.map(q => ({
@@ -169,6 +172,7 @@ const AssessmentBuilder = () => {
           title,
           description,
           timeLimit: parseInt(timeLimit, 10),
+          passPercentage: parseInt(passPercentage, 10) || 60,
           questions
         })
       });
@@ -247,20 +251,38 @@ const AssessmentBuilder = () => {
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-600 uppercase tracking-wide flex items-center space-x-1">
-                  <Clock className="h-3.5 w-3.5 text-slate-400" />
-                  <span>Time Limit (Minutes)</span>
-                </label>
-                <input
-                  type="number"
-                  min="5"
-                  max="180"
-                  value={timeLimit}
-                  onChange={(e) => setTimeLimit(e.target.value)}
-                  required
-                  className="w-full bg-white border border-slate-250 p-2 rounded-lg font-semibold text-slate-700"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-600 uppercase tracking-wide flex items-center space-x-1">
+                    <Clock className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Time Limit (Mins)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="180"
+                    value={timeLimit}
+                    onChange={(e) => setTimeLimit(e.target.value)}
+                    required
+                    className="w-full bg-white border border-slate-250 p-2 rounded-lg font-semibold text-slate-700"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-600 uppercase tracking-wide flex items-center space-x-1">
+                    <Award className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Pass Cutoff (%)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="100"
+                    value={passPercentage}
+                    onChange={(e) => setPassPercentage(e.target.value)}
+                    required
+                    className="w-full bg-white border border-slate-250 p-2 rounded-lg font-semibold text-slate-700"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">

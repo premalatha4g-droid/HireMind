@@ -64,6 +64,27 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// Get Current User Profile (me)
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await db.User.findById(req.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User profile not found.' });
+    }
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        is2FAEnabled: user.is2FAEnabled
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Login User
 router.post('/login', async (req, res) => {
   try {

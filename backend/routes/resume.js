@@ -48,10 +48,6 @@ const formatResumeAnalysis = (analysis) => {
 
 // Upload Resume & Parse
 router.post('/upload', authMiddleware, upload.any(), async (req, res) => {
-  if (req.userRole !== 'CANDIDATE') {
-    return res.status(403).json({ error: 'Only candidate accounts can upload resumes.' });
-  }
-
   const file = req.file || (req.files && req.files[0]);
   if (!file) {
     return res.status(400).json({ error: 'Please select a resume PDF file to upload.' });
@@ -160,10 +156,13 @@ router.post('/upload', authMiddleware, upload.any(), async (req, res) => {
     });
     await log.save();
 
+    const updatedEvidences = await db.SkillEvidence.find({ candidateId: req.userId });
+
     res.status(200).json({
       message: 'Resume uploaded and parsed successfully by AI.',
       resume: savedResume,
-      analysis: formatResumeAnalysis(savedAnalysis)
+      analysis: formatResumeAnalysis(savedAnalysis),
+      skillEvidences: updatedEvidences
     });
 
   } catch (err) {
@@ -209,5 +208,38 @@ router.get('/me', authMiddleware, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Delete candidate resume and resume skill evidences
+const deleteResumeHandler = async (req, res) => {
+  try {
+    let resume = await db.Resume.findOne({ candidateId: req.userId });
+    if (!resume && req.params.id) {
+      resume = await db.Resume.findById(req.params.id);
+    }
+    if (!resume) {
+      return res.status(404).json({ error: 'No resume found to delete.' });
+    }
+
+    await db.ResumeAnalysis.deleteMany({ resumeId: resume._id });
+    await db.SkillEvidence.deleteMany({ candidateId: resume.candidateId, source: 'RESUME' });
+    await db.Resume.findByIdAndDelete(resume._id);
+
+    // Audit log
+    const log = new db.AuditLog({
+      userId: req.userId,
+      action: 'DELETE_RESUME',
+      details: `Deleted resume ID: ${resume._id}`,
+      status: 'SUCCESS'
+    });
+    await log.save();
+
+    res.json({ message: 'Resume profile and evidence deleted successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+router.delete('/me', authMiddleware, deleteResumeHandler);
+router.delete('/:id', authMiddleware, deleteResumeHandler);
 
 module.exports = router;
