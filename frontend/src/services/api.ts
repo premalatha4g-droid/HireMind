@@ -1,3 +1,5 @@
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 const apiFetch = async (url, options = {}) => {
   const token = localStorage.getItem('hiremind_token');
   const headers = {
@@ -13,7 +15,9 @@ const apiFetch = async (url, options = {}) => {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, {
+  const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
+
+  const response = await fetch(fullUrl, {
     ...options,
     headers,
   });
